@@ -850,7 +850,10 @@ class ChatWindow(ctk.CTkToplevel):
         context = self.parent.game_state.get_chat_context(message)
 
         # Generate enhanced prompt with context
-        enhanced_prompt = f"""{context}
+        enhanced_prompt = f"""CURRENT GAME STATE:
+{context}
+
+IMPORTANT: You must ONLY use the information provided above in "CURRENT GAME STATE". If the information is not available there, say you don't know. Do NOT make up system names, locations, or any other information.
 
 Commander's message: {message}"""
 

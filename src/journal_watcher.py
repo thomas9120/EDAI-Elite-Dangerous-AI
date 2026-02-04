@@ -28,17 +28,22 @@ class JournalFileHandler(FileSystemEventHandler):
         self.last_position = 0
         self.current_journal: Optional[Path] = None
 
-    def set_journal_file(self, journal_path: Path) -> None:
+    def set_journal_file(self, journal_path: Path, read_initial: bool = False) -> None:
         """
         Set the current journal file to monitor
 
         Args:
             journal_path: Path to the journal file
+            read_initial: If True, read existing events from the file to populate initial state
         """
         if self.current_journal != journal_path:
             self.current_journal = journal_path
             # Reset position for new file
             if journal_path.exists():
+                # If read_initial is True, read recent state events from the file
+                if read_initial:
+                    self._read_initial_state()
+                # Set position to end for new events
                 self.last_position = journal_path.stat().st_size
             else:
                 self.last_position = 0
@@ -89,6 +94,62 @@ class JournalFileHandler(FileSystemEventHandler):
         except (IOError, OSError) as e:
             print(f"Error reading journal file: {e}")
 
+    def _read_initial_state(self) -> None:
+        """
+        Read recent state-relevant events from the journal file to populate initial game state
+        Only reads events that affect game state (LoadGame, FSDJump, Docked, etc.)
+        """
+        if not self.current_journal or not self.current_journal.exists():
+            return
+
+        # Events that affect game state (in order of importance)
+        state_events = [
+            "LoadGame",  # Most important - contains starting system
+            "FSDJump",   # Last jump tells us current system
+            "Docked",    # Current docking status
+            "Undocked",
+            "SupercruiseEntry",
+            "SupercruiseExit",
+            "ShipRefuelled",
+            "ShieldState",
+            "Cargo"
+        ]
+
+        # Read from the end to find the most recent state events
+        try:
+            events_found = []
+            with open(self.current_journal, 'r', encoding='utf-8', errors='ignore') as f:
+                # Read all lines (could be large, but only on startup)
+                lines = f.readlines()
+
+                # Process in reverse to get most recent events first
+                for line in reversed(lines):
+                    line = line.strip()
+                    if line:
+                        try:
+                            event_data = json.loads(line)
+                            event_name = event_data.get("event", "")
+
+                            # Only process state-relevant events
+                            if event_name in state_events:
+                                events_found.append(event_data)
+
+                                # Stop once we have LoadGame (our starting point)
+                                if event_name == "LoadGame":
+                                    break
+
+                        except json.JSONDecodeError:
+                            continue
+
+            # Now process events in forward order (since we collected them in reverse)
+            for event_data in reversed(events_found):
+                event_name = event_data.get("event", "")
+                print(f"[INITIAL STATE] Loading: {event_name}")
+                self.callback(event_data)
+
+        except (IOError, OSError) as e:
+            print(f"Error reading initial state from journal: {e}")
+
 
 class JournalWatcher:
     """
@@ -131,9 +192,12 @@ class JournalWatcher:
         latest_journal = max(journal_files, key=lambda p: p.stat().st_mtime)
         return latest_journal
 
-    def start(self) -> bool:
+    def start(self, read_initial_state: bool = True) -> bool:
         """
         Start monitoring the journal file
+
+        Args:
+            read_initial_state: If True, read existing events to populate initial game state
 
         Returns:
             True if started successfully, False otherwise
@@ -150,7 +214,7 @@ class JournalWatcher:
 
         # Create handler and observer
         self.handler = JournalFileHandler(self.event_callback)
-        self.handler.set_journal_file(latest_journal)
+        self.handler.set_journal_file(latest_journal, read_initial=read_initial_state)
 
         self.observer = Observer()
         self.observer.schedule(self.handler, str(self.journal_dir), recursive=False)

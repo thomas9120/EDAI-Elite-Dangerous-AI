@@ -15,7 +15,7 @@ class Config:
         "journal_path": os.path.expanduser("~\\Saved Games\\Frontier Developments\\Elite Dangerous"),
         "llm_model_path": "models\\gemma-2-2b-it-abliterated.Q4_K_M.gguf",
         "tts_model_path": "models\\pocket-tts",
-        "system_prompt": "You are the AI of an Elite Dangerous ship called the 'Orca'. You are sarcastic but helpful. Keep responses under 20 words. Stay in character as a ship's computer.",
+        "system_prompt": "You are the AI of an Elite Dangerous ship called the 'Orca'. You are sarcastic but helpful. Keep responses under 20 words. Stay in character as a ship's computer. IMPORTANT: Only use information provided in the event/game state. If you don't know something, admit it. Never make up system names, locations, or facts.",
         "voice_selection": "alba",
         "n_ctx": 4096,
         "n_gpu_layers": -1,
