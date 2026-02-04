@@ -1,0 +1,233 @@
+
+
+Here is a comprehensive plan for creating an **Elite Dangerous AI Companion** (MVP). This application will run locally on Windows, read the game logs, and use local AI models to act as a vocal ship computer.
+
+---
+
+# Project Name: EDAI (Elite Dangerous AI Interface)
+
+## 1. High-Level Architecture
+
+The application consists of four distinct modules that communicate via a central loop:
+
+1.  **Journal Watcher:** Monitors the Elite Dangerous game logs for file changes and reads new lines (JSON events).
+2.  **Event Parser:** Filters irrelevant events and formats relevant ones (e.g., "FSDEngaged", "DockingGranted") into a prompt.
+3.  **The Brain (LLM):** A local Small Language Model that takes the event + system prompt and generates a character response.
+4.  **The Mouth (TTS):** A local Text-to-Speech engine that converts the LLM response into audio.
+
+**Data Flow:**
+`Game Log` -> `Watcher` -> `Queue` -> `LLM` -> `TTS` -> `Audio Output`
+
+---
+
+## 2. Technology Stack & Dependencies
+
+To keep this simple, portable, and Windows-compatible, we will use **Python**.
+
+*   **Language:** Python 3.10+
+*   **GUI Framework:** `CustomTkinter` (Modern, easy to use, dark mode by default) or `PyQt6` (Standard industry). *Recommendation: CustomTkinter for MVP speed.*
+*   **File Monitoring:** `watchdog`
+*   **LLM Inference:** `llama-cpp-python` (This is crucial. It allows us to run the Gemma model efficiently on CPU or GPU via quantized `.gguf` files).
+*   **TTS Engine:** `pocket-tts` (Kyutai).
+*   **Audio Output:** `pyaudio` or `sounddevice`.
+*   **Packaging:** `PyInstaller`.
+
+---
+
+## 3. Step-by-Step Implementation Plan
+
+### Phase 1: Environment & Configuration
+
+1.  **Set up Python Project:**
+    *   Create a virtual environment (`venv`).
+    *   Create a folder structure:
+        *   `/models` (Where user puts the `.gguf` and TTS files).
+        *   `/config` (JSON or YAML settings).
+        *   `/src` (Main code).
+
+2.  **Configuration Management (`settings.json`):**
+    *   Create a default config file that stores:
+        *   Path to Elite Dangerous Journal folder (default: `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous`).
+        *   Path to LLM model file.
+        *   Path to TTS model file.
+        *   System Prompt (The character personality).
+        *   Voice Selection settings.
+
+### Phase 2: The Journal Watcher ("The Eyes")
+
+Elite Dangerous writes to `Journal....log` files. The app must detect the *active* log file.
+
+1.  **Locate Log File:**
+    *   Scan the Journal directory.
+    *   Sort files by date modified.
+    *   Select the newest file.
+2.  **File Monitoring (`watchdog`):**
+    *   Create a `FileModifiedEventHandler`.
+    *   Since ED appends to the file, we need to track the last byte position read. When the file updates, read from the last position to the end.
+3.  **Event Filtering:**
+    *   Not every event matters (e.g., `Location` triggers constantly). Create a **Whitelist** of events to comment on:
+        *   `FSDJump`
+        *   `DockingGranted`
+        *   `ShieldState`
+        *   `ShipLowFuel`
+        *   `Bounty`
+        *   `Died`
+        *   `MaterialCollected`
+
+### Phase 3: The LLM Integration ("The Brain")
+
+**Model:** `ZeroWw/gemma-2-2b-it-abliterated-SILLY`
+**Format:** This model must be converted to a **GGUF** format (Quantized) to run smoothly on consumer hardware using `llama-cpp-python`.
+
+1.  **Loading the Model:**
+    *   Use `llama_cpp.Llama` to load the `.gguf` file from the `/models` folder.
+    *   Set `n_ctx=2048` (small context is fine for this).
+    *   Set `n_gpu_layers=-1` (offload to GPU if available for speed) or `0` for CPU only.
+
+2.  **Prompt Construction:**
+    *   **System Prompt:** (Loaded from UI settings). Example: *"You are the AI of an Elite Dangerous ship called the 'Orca'. You are sarcastic but helpful. Keep responses under 20 words."*
+    *   **User Prompt:** *"[Event] FSDJump to system 'Shinrarta Dezhra'. [Details] Fuel remaining: 50%."*
+    *   **Stop Token:** Configure the LLM to stop at `\n` or specific end tokens to prevent rambling.
+
+3.  **Performance Optimization:**
+    *   Run the LLM generation in a separate thread so the GUI doesn't freeze.
+    *   Set `max_tokens` to roughly 40-50 (Keep it short! The player needs info, not a novel).
+
+### Phase 4: The TTS Integration ("The Mouth")
+
+**Model:** Kyutai's `pocket-tts`
+
+1.  **Implementation:**
+    *   Since `pocket-tts` is a specific research repo, you will likely need to clone their GitHub repository and import the inference logic directly or wrap it in a class.
+    *   *Alternative if Pocket-TTS is too complex:* Use `MMS` or `XTTS` via HuggingFace `transformers`. *However, adhering to your request:*
+    *   Create a `Synthesizer` class that loads the `pocket-tts` model checkpoints.
+
+2.  **Audio Playback:**
+    *   Generate the WAV/PCM data in memory.
+    *   Play using `sounddevice.play()`.
+
+3.  **Queue Management (Crucial):**
+    *   If 3 events happen fast (Shields down -> Hull hit -> Low health), you don't want the AI to talk over itself for 30 seconds.
+    *   **Logic:** If the audio queue is not empty, clear the pending "non-urgent" lines and replace them with the new urgent event.
+
+### Phase 5: The User Interface (GUI)
+
+A simple, minimalist control panel using `CustomTkinter`.
+
+**Main Window:**
+*   **Status Indicator:** Green (Listening to Logs) / Red (Paused).
+*   **Last Event Log:** A read-only text box showing the last JSON event processed.
+*   **Last AI Response:** A text box showing what the AI just said.
+*   **Controls:** Start / Stop / Test Audio.
+
+**Settings Window:**
+*   **Journal Path:** Text input + Browse button.
+*   **System Prompt:** Multi-line text box (Editable).
+*   **Voice Selector:** Dropdown menu (this maps to different voice files or parameters for Pocket-TTS).
+*   **Model Paths:** Inputs to point to where the `.gguf` and TTS files are located.
+
+---
+
+## 4. MVP Development Workflow
+
+### Step 1: The Dummy Prototype (No AI)
+Write a script that simply watches the Journal file and prints "Event Detected: [Name]" to the console.
+*Goal: Ensure we can reliably detect ED events.*
+
+### Step 2: The Talking Dummy (No LLM)
+Connect the file watcher to the TTS engine. If `FSDJump` is detected, simply say "FSD Jump Complete" hardcoded.
+*Goal: Ensure the audio pipeline works without latency issues.*
+
+### Step 3: The Brain (LLM Integration)
+Replace the hardcoded text with the `llama-cpp-python` inference.
+*Goal: Tweak the prompt to ensure the AI stays in character and keeps responses short.*
+
+### Step 4: The GUI
+Wrap the logic in the CustomTkinter window. Add the settings to change the System Prompt.
+
+### Step 5: Packaging
+Use `PyInstaller` to create a single EXE.
+*Command:* `pyinstaller --onefile --windowed --icon=icon.ico main.py`
+
+---
+
+## 5. Specific Technical Recommendations
+
+### Handling the Model (Gemma 2 2B)
+Since you want an MVP that is easy to install, do not ask the user to download raw `.safetensors` and convert them.
+*   **Your Role:** Download the model, convert it to **GGUF (Q4_K_M or Q5_K_M quantization)** using `llama.cpp`.
+*   **User Experience:** The user downloads a ~1.5GB `.gguf` file and places it in the `/models` folder. This is much easier for them than setting up PyTorch.
+
+### Handling "Abliterated" Model
+This model is uncensored/unfiltered. Ensure your System Prompt explicitly instructs the AI to remain focused on game mechanics and roleplay to avoid it drifting into weird territory during gameplay.
+
+### Audio Latency Strategy
+*   **LLM Generation:** Takes 0.5s - 2s.
+*   **TTS Generation:** Takes 0.5s.
+*   **Total Delay:** Acceptable for a non-combat chat, but bad for combat warnings ("Shields Down!").
+*   **Solution:** For critical events (Low Health, Shields Down), have a list of **canned responses** (pre-recorded or hardcoded TTS) that play instantly, bypassing the LLM. The LLM can be used for ambient chatter (Docking, Jumping, Scanning).
+
+---
+
+## 6. Installation & Uninstall Plan
+
+### Installer
+1.  Use **Inno Setup** (standard Windows installer compiler).
+2.  Script it to:
+    *   Extract the Main EXE.
+    *   Create a folder `C:\Program Files\EDAI\`.
+    *   Create a shortcut on the Desktop.
+    *   Ask the user if they want to download the Models (or provide a ReadMe link).
+
+### Uninstall
+Inno Setup automatically creates an `unins000.exe`. This will remove the EXE and shortcuts. The User Settings (saved in `%APPDATA%`) can be preserved or deleted based on user choice during uninstall.
+
+---
+
+## 7. Code Structure Draft (Pseudo-Python)
+
+```python
+# main.py
+import threading
+from watchdog.observers import Observer
+from llama_cpp import Llama
+# import pocket_tts_loader
+
+class EDCompanionApp:
+    def __init__(self):
+        self.load_settings()
+        self.llm = Llama(model_path=self.settings['llm_path'])
+        # self.tts = PocketTTS(self.settings['tts_path'])
+        self.is_running = False
+        self.audio_queue = []
+
+    def start(self):
+        self.is_running = True
+        # Start File Watcher Thread
+        # Start Audio Player Thread
+
+    def on_journal_event(self, event_data):
+        if not self.is_running: return
+        
+        # 1. Filter Event
+        if event_data['event'] not in ['FSDJump', 'DockingGranted']: return
+
+        # 2. Construct Prompt
+        prompt = f"{self.settings['system_prompt']} \n Event: {event_data['event']} Data: {event_data}"
+        
+        # 3. Generate Response (in thread to not block UI)
+        response = self.llm(prompt, max_tokens=50)
+        
+        # 4. TTS & Play
+        self.speak(response)
+
+    def speak(self, text):
+        # Generate audio
+        # Add to queue
+        # If queue is empty, play immediately
+        pass
+
+if __name__ == "__main__":
+    # Launch GUI
+    pass
+```

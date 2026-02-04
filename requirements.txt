@@ -1,0 +1,30 @@
+# EDAI - Elite Dangerous AI Companion
+# Requirements for Python 3.10+
+
+# GUI Framework
+customtkinter>=5.2.0
+
+# File Monitoring
+watchdog>=3.0.0
+
+# LLM Inference (Local GGUF support)
+llama-cpp-python>=0.2.0
+
+# TTS Engine - pocket-tts dependencies
+# PyTorch (CPU version is sufficient for pocket-tts)
+torch>=2.5.0
+torchaudio>=2.5.0
+
+# pocket-tts (optional - can also be installed from local source)
+# Install from local: models/pocket-tts
+# Or from PyPI: pip install pocket-tts
+
+# Audio Output
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# Configuration & Utilities
+pyyaml>=6.0
+
+# Packaging
+pyinstaller>=6.0.0

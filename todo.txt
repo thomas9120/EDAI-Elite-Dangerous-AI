@@ -1,0 +1,360 @@
+# EDAI TODO - Event Whitelist Selection Feature
+
+## ✅ COMPLETED (Basic Implementation - 2026-02-04)
+
+### What was implemented:
+- ✅ Created `src/event_metadata.py` with event display names
+- ✅ Added tabbed interface to Settings window (General / Events tabs)
+- ✅ Events tab with all 33 events as checkboxes
+- ✅ "Select All" and "Select None" quick action buttons
+- ✅ Load/save functionality for event selections
+- ✅ Warning when no events are selected
+- ✅ All tests passing
+
+### Features working:
+- Tabbed settings interface
+- Scrollable event list
+- Checkbox selection for each event
+- Settings persist across restarts
+- Integration with existing event parser
+
+---
+
+## Remaining Tasks (Optional Enhancements)
+
+The following items from the original plan are NOT yet implemented and can be added later:
+
+---
+
+## Phase 1: Data Structure & Organization
+
+### 1.1 Categorize Events
+Group existing events into logical categories for better UI organization:
+
+**Navigation Events:**
+- FSDJump
+- StartJump
+- SupercruiseEntry
+- SupercruiseExit
+- JumpReq
+
+**Docking Events:**
+- DockingGranted
+- DockingDenied
+- DockingCancelled
+- DockingRequested
+- Undocked
+
+**Combat/Status Events:**
+- ShieldState
+- ShipLowFuel
+- Died
+- Bounty
+- Resurrect
+
+**Exploration Events:**
+- Scan
+- SAASignalsFound
+- MaterialCollected
+- MaterialDiscarded
+
+**Mission/Progression Events:**
+- MissionAccepted
+- MissionCompleted
+- MissionFailed
+- MissionRedirected
+- CommunityGoal
+
+**Crew/Multiplayer Events:**
+- CrewAssign
+- CrewMemberJoins
+- CrewMemberQuits
+- CrewLaunchFighter
+- CrewMemberRoleChange
+
+**Engineering/Crafting Events:**
+- Synthesis
+- EngineerCraft
+
+**System Events:**
+- LoadGame
+- FuelFull
+
+### 1.2 Create Event Metadata
+Create a new file `src/event_metadata.py` with:
+```python
+EVENT_CATEGORIES = {
+    "navigation": {
+        "name": "Navigation",
+        "description": "FSD jumps and travel events",
+        "events": ["FSDJump", "StartJump", "SupercruiseEntry", "SupercruiseExit", "JumpReq"]
+    },
+    "docking": {
+        "name": "Docking",
+        "description": "Station docking events",
+        "events": ["DockingGranted", "DockingDenied", "DockingCancelled", "DockingRequested", "Undocked"]
+    },
+    # ... etc
+}
+
+# Display-friendly names for each event
+EVENT_DISPLAY_NAMES = {
+    "FSDJump": "FSD Jump Complete",
+    "DockingGranted": "Docking Permission Granted",
+    "ShieldState": "Shield Status Change",
+    # ... etc
+}
+```
+
+---
+
+## Phase 2: GUI Implementation
+
+### 2.1 Update Settings Window Layout
+
+Add a new tabbed interface to the Settings window:
+
+```
+Settings Window
+├── [General] Tab (current settings)
+│   ├── Journal Path
+│   ├── Model Paths
+│   ├── System Prompt
+│   └── Max Tokens
+├── [Events] Tab (NEW)
+│   ├── Category: Navigation [Select All] [None]
+│   │   ├── ☑ FSD Jump Complete
+│   │   ├── ☑ Start Jump
+│   │   └── ...
+│   ├── Category: Docking [Select All] [None]
+│   │   ├── ☑ Docking Permission Granted
+│   │   └── ...
+│   └── [Reset to Defaults] button
+└── [Voice] Tab (NEW)
+    ├── Voice Selection dropdown
+    └── Audio device selection
+```
+
+### 2.2 Implementation Details
+
+**File: `src/gui.py` - Add to SettingsWindow class:**
+
+```python
+def _build_events_tab(self, parent):
+    """Build the events selection tab"""
+    # Use CTkScrollableFrame for scrollable content
+    events_frame = ctk.CTkScrollableFrame(parent, label_text="Event Whitelist")
+
+    # Add each category with checkboxes
+    for category_id, category_info in EVENT_CATEGORIES.items():
+        # Category header
+        cat_frame = ctk.CTkFrame(events_frame)
+        cat_label = ctk.CTkLabel(cat_frame, text=category_info["name"],
+                                  font=ctk.CTkFont(size=16, weight="bold"))
+        cat_label.pack(anchor="w", padx=10, pady=(10, 5))
+
+        # Select All / None buttons
+        btn_frame = ctk.CTkFrame(cat_frame)
+        select_all_btn = ctk.CTkButton(btn_frame, text="Select All",
+                                        command=lambda: self._select_category(category_id, True))
+        none_btn = ctk.CTkButton(btn_frame, text="None",
+                                 command=lambda: self._select_category(category_id, False))
+
+        # Event checkboxes
+        self.event_checkboxes = {}
+        for event_name in category_info["events"]:
+            display_name = EVENT_DISPLAY_NAMES.get(event_name, event_name)
+            var = ctk.BooleanVar()
+            checkbox = ctk.CTkCheckBox(cat_frame, text=display_name, variable=var)
+            checkbox.pack(anchor="w", padx=20, pady=2)
+            self.event_checkboxes[event_name] = var
+
+def _select_category(self, category_id, state):
+    """Select/deselect all events in a category"""
+    for event_name in EVENT_CATEGORIES[category_id]["events"]:
+        if event_name in self.event_checkboxes:
+            self.event_checkboxes[event_name].set(state)
+```
+
+### 2.3 Load/Save Event Selection
+
+**In SettingsWindow._load_settings():**
+```python
+# Load event whitelist
+for event_name, var in self.event_checkboxes.items():
+    var.set(event_name in self.config.events_whitelist)
+```
+
+**In SettingsWindow.save_settings():**
+```python
+# Save event whitelist
+selected_events = [event for event, var in self.event_checkboxes.items() if var.get()]
+self.config.set("events_whitelist", selected_events)
+```
+
+---
+
+## Phase 3: Enhanced Features
+
+### 3.1 Add Presets
+Add quick-select presets for different playstyles:
+
+**Preset Options:**
+- **Minimal**: Only critical events (ShieldState, ShipLowFuel, Died)
+- **Balanced**: Navigation + Docking + Critical (default)
+- **Chatty**: All events enabled
+- **Combat Focus**: Combat, status, and damage events
+- **Explorer Focus**: Exploration, scanning, and material events
+
+```python
+PRESETS = {
+    "minimal": {
+        "name": "Minimal (Critical Only)",
+        "description": "Only urgent and important events",
+        "events": ["ShieldState", "ShipLowFuel", "Died", "Resurrect"]
+    },
+    "balanced": {
+        "name": "Balanced (Recommended)",
+        "description": "Good mix of events without being overwhelming",
+        "events": ["FSDJump", "DockingGranted", "ShieldState", "ShipLowFuel",
+                   "Bounty", "Scan", "MissionCompleted", "Died"]
+    },
+    # ... etc
+}
+```
+
+### 3.2 Add Event Preview
+Show a tooltip or info panel explaining when each event triggers:
+
+```python
+EVENT_DESCRIPTIONS = {
+    "FSDJump": "Triggers when you complete a hyperspace jump to a new system",
+    "ShieldState": "Triggers when your shields go down or come back online",
+    "ShipLowFuel": "Triggers when your fuel drops to critical levels",
+    # ... etc
+}
+```
+
+Add a (?) button next to each event that shows the description on hover/click.
+
+### 3.3 Add Frequency Indicators
+Show how often each event typically triggers:
+
+```python
+EVENT_FREQUENCY = {
+    "FSDJump": "Medium",
+    "ShieldState": "Low (combat)",
+    "Location": "Very High (spammy!)",
+    "Scan": "High",
+    # ... etc
+}
+```
+
+Display with color coding: 🟢 Low, 🟡 Medium, 🟠 High, 🔴 Very High
+
+---
+
+## Phase 4: Configuration Migration
+
+### 4.1 Update Config Structure
+Update `settings.json` to store selected events by category:
+
+```json
+{
+  "events_whitelist": {
+    "navigation": ["FSDJump", "StartJump"],
+    "docking": ["DockingGranted", "Undocked"],
+    "combat": ["ShieldState", "Bounty", "Died"],
+    ...
+  },
+  "events_preset": "balanced"
+}
+```
+
+### 4.2 Backward Compatibility
+Add migration logic in `Config.load()`:
+
+```python
+def load(self):
+    # Load existing settings
+    if self.config_path.exists():
+        with open(self.config_path, 'r') as f:
+            self.settings = json.load(f)
+
+    # Migrate old events_whitelist format (list) to new format (dict)
+    events_whitelist = self.settings.get("events_whitelist", [])
+    if isinstance(events_whitelist, list):
+        # Migrate to categorized format
+        new_whitelist = self._categorize_events(events_whitelist)
+        self.settings["events_whitelist"] = new_whitelist
+        self.save()  # Save migrated format
+
+    return self.settings
+```
+
+---
+
+## Phase 5: Testing & Polish
+
+### 5.1 Test Cases
+- [ ] Verify checkbox state persists across app restarts
+- [ ] Test Select All/None buttons for each category
+- [ ] Test preset selection loads correct events
+- [ ] Verify empty whitelist shows appropriate warning
+- [ ] Test event filtering works with custom selections
+- [ ] Verify urgent events still work even if not in whitelist
+
+### 5.2 UI Polish
+- [ ] Add keyboard shortcuts (Ctrl+A for Select All)
+- [ ] Add search/filter box to find events quickly
+- [ ] Show count of selected events (e.g., "15 of 40 events selected")
+- [ ] Add "Apply" button to test changes without closing settings
+- [ ] Add tooltips explaining each event
+
+### 5.3 Documentation
+- [ ] Update README with screenshots of events tab
+- [ ] Add explanation of each event category
+- [ ] Document recommended settings for different playstyles
+
+---
+
+## Implementation Order (Priority)
+
+1. **High Priority:**
+   - Create `event_metadata.py` with event categories
+   - Add Events tab to Settings window
+   - Implement checkbox selection
+   - Wire up load/save functionality
+
+2. **Medium Priority:**
+   - Add Select All/None buttons per category
+   - Add preset selection (Minimal, Balanced, Chatty)
+   - Migrate config format for categories
+
+3. **Low Priority (Nice to Have):**
+   - Event descriptions/tooltips
+   - Frequency indicators
+   - Search/filter functionality
+   - Event count display
+
+---
+
+## Files to Modify
+
+1. **New Files:**
+   - `src/event_metadata.py` - Event categories and metadata
+
+2. **Modified Files:**
+   - `src/gui.py` - Add Events tab to SettingsWindow
+   - `src/config.py` - Update load/save for categorized whitelist
+   - `settings/settings.json` - Updated structure
+
+---
+
+## Notes
+
+- The current `events_whitelist` in settings.json is a simple list
+- Consider keeping urgent events (`ShieldState`, `ShipLowFuel`, `Died`) always enabled
+- Events like `Location` should remain hidden as they trigger too frequently
+- The UI should handle the case where no events are selected (warn user)
+- Consider adding an "Advanced Mode" that shows ALL possible Elite Dangerous events
