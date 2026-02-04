@@ -80,6 +80,7 @@ class TTSEngine:
         self.current_priority = AudioPriority.LOW
         self.is_playing = False
         self.stop_current_playback = False
+        self._queue_counter = 0  # Tiebreaker for items with same priority
 
         # Worker thread
         self._worker_thread: Optional[threading.Thread] = None
@@ -126,8 +127,10 @@ class TTSEngine:
                 self.stop_current_playback = True
 
         # Add to queue (use negative priority since PriorityQueue is min-heap)
+        # Counter ensures FIFO ordering for items with same priority
         request = AudioRequest(text=text, priority=priority)
-        self.audio_queue.put((-priority.value, request))
+        self.audio_queue.put((-priority.value, self._queue_counter, request))
+        self._queue_counter += 1
 
         # Start worker if not running
         if self._worker_thread is None or not self._worker_thread.is_alive():
@@ -156,7 +159,7 @@ class TTSEngine:
         while not self.audio_queue.empty():
             try:
                 item = self.audio_queue.get_nowait()
-                _, request = item
+                _, _, request = item  # Unpack (priority, counter, request)
                 if request.priority >= priority:
                     new_queue.put(item)
             except queue.Empty:
@@ -248,7 +251,7 @@ class TTSEngine:
             try:
                 # Get request from queue
                 try:
-                    priority_val, request = self.audio_queue.get(timeout=0.5)
+                    priority_val, counter, request = self.audio_queue.get(timeout=0.5)
                 except queue.Empty:
                     continue
 
