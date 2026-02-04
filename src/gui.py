@@ -411,8 +411,10 @@ class EDAIApp(ctk.CTk):
                 if self.tts:
                     self.tts.speak(response, AudioPriority.NORMAL)
 
-            print(f"[EVENT] Sending to LLM: {parsed.formatted_text}")
-            self.llm.generate(parsed.formatted_text, on_response)
+            # Add prefix to help LLM understand this is a system update, not user chat
+            event_with_prefix = f"Ship's computer status update: {parsed.formatted_text}"
+            print(f"[EVENT] Sending to LLM: {event_with_prefix}")
+            self.llm.generate(event_with_prefix, on_response)
 
     def _announce_initial_state(self):
         """Announce a summary of the current game state after initial load"""
