@@ -122,7 +122,7 @@ class TTSEngine:
         if priority == AudioPriority.URGENT:
             self._clear_queue_below(priority)
             # Stop current playback if lower priority
-            if self.current_priority < priority:
+            if self.current_priority.value < priority.value:
                 self.stop_current_playback = True
 
         # Add to queue (use negative priority since PriorityQueue is min-heap)

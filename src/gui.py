@@ -357,6 +357,11 @@ class EDAIApp(ctk.CTk):
         # Update game state
         self.game_state.update(event_data)
 
+        # Debug: Log game state updates
+        event_name = event_data.get("event", "")
+        if event_name in ["LoadGame", "FSDJump", "Docked", "Undocked", "ShipRefuelled", "ShieldState", "ShipLowFuel"]:
+            print(f"[GAME STATE UPDATE] {event_name}: Current system={self.game_state.state.current_system}, Fuel={self.game_state.state.fuel_level}/{self.game_state.state.fuel_capacity}, Shields={'UP' if self.game_state.state.shields_up else 'DOWN'}")
+
         # Parse event
         parsed = self.parser.parse(event_data)
         if not parsed:
@@ -375,13 +380,24 @@ class EDAIApp(ctk.CTk):
                 self.tts.speak(canned, AudioPriority.URGENT)
                 return
 
+        # Check if raw data mode is enabled
+        if self.config.raw_data_mode:
+            # Speak the formatted text directly without LLM
+            print(f"[RAW DATA MODE] Speaking: {parsed.formatted_text}")
+            self.event_queue.put(("response", f"[{parsed.event_type}] {parsed.formatted_text}"))
+            if self.tts:
+                self.tts.speak(parsed.formatted_text, AudioPriority.NORMAL)
+            return
+
         # Generate LLM response
         if self.llm:
             def on_response(response: str):
+                print(f"[EVENT] {parsed.event_type} → LLM Response: {response}")
                 self.event_queue.put(("response", f"[{parsed.event_type}] {response}"))
                 if self.tts:
                     self.tts.speak(response, AudioPriority.NORMAL)
 
+            print(f"[EVENT] Sending to LLM: {parsed.formatted_text}")
             self.llm.generate(parsed.formatted_text, on_response)
 
     def test_audio(self):
@@ -540,6 +556,25 @@ class SettingsWindow(ctk.CTkToplevel):
         self.max_tokens_entry = ctk.CTkEntry(tokens_frame)
         self.max_tokens_entry.pack(fill="x", padx=10, pady=(0, 10))
 
+        # Raw Data Mode
+        raw_frame = ctk.CTkFrame(container)
+        raw_frame.pack(fill="x", pady=(10, 20))
+
+        self.raw_data_checkbox = ctk.CTkCheckBox(
+            raw_frame,
+            text="Raw Data Mode (speak event data directly, bypass LLM)",
+            checkbox_width=20,
+            font=ctk.CTkFont(size=12)
+        )
+        self.raw_data_checkbox.pack(anchor="w", padx=10, pady=(10, 5))
+        raw_info = ctk.CTkLabel(
+            raw_frame,
+            text="When enabled, the ship AI will read event data directly without AI interpretation.\nUseful for accurate information or testing.",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        raw_info.pack(anchor="w", padx=30, pady=(0, 10))
+
     def _build_events_tab(self, parent):
         """Build the Events selection tab"""
         from event_metadata import EVENT_DISPLAY_NAMES, ALL_AVAILABLE_EVENTS
@@ -653,6 +688,9 @@ class SettingsWindow(ctk.CTkToplevel):
         self.system_prompt_text.insert("1.0", self.config.system_prompt)
         self.max_tokens_entry.insert("0", str(self.config.max_tokens))
 
+        # Raw Data Mode checkbox
+        self.raw_data_checkbox.select(self.config.raw_data_mode)
+
         # Event checkboxes
         current_whitelist = set(self.config.events_whitelist)
         for event_name, var in self.event_checkboxes.items():
@@ -676,6 +714,9 @@ class SettingsWindow(ctk.CTkToplevel):
         except ValueError:
             messagebox.showerror("Error", "Max tokens must be a number")
             return
+
+        # Raw Data Mode
+        self.config.set("raw_data_mode", self.raw_data_checkbox.get())
 
         # Event whitelist
         selected_events = [event for event, var in self.event_checkboxes.items() if var.get()]
@@ -794,6 +835,15 @@ class ChatWindow(ctk.CTkToplevel):
         # Add user message to history
         self._add_message("You", message)
 
+        # Check if raw data mode is enabled
+        if self.parent.config.raw_data_mode:
+            # Just speak the game state directly without LLM
+            context = self.parent.game_state.get_chat_context(message)
+            self._add_message("System", f"Raw Data: {context}", "#8888ff")
+            if self.parent.tts:
+                self.parent.tts.speak(context, AudioPriority.NORMAL)
+            return
+
         # Get game state context
         context = self.parent.game_state.get_chat_context(message)
 
@@ -802,8 +852,20 @@ class ChatWindow(ctk.CTkToplevel):
 
 Commander's message: {message}"""
 
+        # Debug: Log what's being sent to LLM
+        print("=" * 80)
+        print("[CHAT] Sending to LLM:")
+        print("-" * 80)
+        print(enhanced_prompt)
+        print("-" * 80)
+        print("=" * 80)
+
+        # Also add to chat history for visibility
+        self._add_message("Debug", f"Context: {self.parent.game_state.state.current_system or 'Unknown'}", "#888888")
+
         # Generate response
         def on_response(response: str):
+            print(f"[CHAT] LLM Response: {response}")
             self._add_message("AI", response, "#00FF00")
             if self.parent.tts:
                 self.parent.tts.speak(response, AudioPriority.NORMAL)

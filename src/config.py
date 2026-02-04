@@ -22,6 +22,7 @@ class Config:
         "max_tokens": 50,
         "temperature": 0.3,
         "audio_device": None,
+        "raw_data_mode": False,
         "events_whitelist": [
             "FSDJump", "DockingGranted", "ShieldState", "ShipLowFuel",
             "Bounty", "Died", "MaterialCollected", "DockingDenied",
@@ -174,3 +175,8 @@ class Config:
     def urgent_events(self) -> list:
         """Get list of urgent events that bypass normal queue"""
         return self.get("urgent_events", self.DEFAULT_CONFIG["urgent_events"])
+
+    @property
+    def raw_data_mode(self) -> bool:
+        """Get raw data mode setting (bypass LLM, speak raw text)"""
+        return self.get("raw_data_mode", False)

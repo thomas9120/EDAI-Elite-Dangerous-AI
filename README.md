@@ -8,6 +8,9 @@ A local AI companion for Elite Dangerous that monitors game logs and provides vo
 - **Event Filtering**: Intelligently filters relevant game events
 - **AI Responses**: Uses a local LLM to generate contextual, in-character responses
 - **Text-to-Speech**: Converts AI responses to audio using local TTS
+- **Raw Data Mode**: Toggle to speak event data directly without LLM processing
+- **Context-Aware Chat**: Chat with the AI with full awareness of game state (location, fuel, ship, etc.)
+- **EDSM Integration**: Fetches system information (allegiance, economy, population, etc.)
 - **Priority Audio Queue**: Urgent events (shield down, low fuel) get immediate attention
 - **Modern GUI**: Built with CustomTkinter for a sleek dark theme
 
@@ -102,6 +105,22 @@ On first run, configure the settings:
 - **Start/Stop Monitoring**: Toggle journal watching
 - **Test Audio**: Verify TTS output
 - **Settings**: Configure paths and prompts
+- **Chat**: Open chat window to talk with your AI copilot
+
+### Raw Data Mode
+
+Raw Data Mode allows you to bypass the LLM and have the TTS speak event data directly. This is useful when you want:
+
+- Accurate, factual information without AI interpretation
+- Faster response times (no LLM processing)
+- To verify that journal events are being detected correctly
+
+When enabled:
+- Journal events are spoken as formatted text
+- EDSM system information is still included (allegiance, economy, etc.)
+- Chat responses are spoken directly without LLM processing
+
+Toggle Raw Data Mode in Settings > General tab.
 
 ## Project Structure
 
@@ -182,7 +201,7 @@ pyinstaller --onefile --windowed --icon=icon.ico main.py
 
 ## License
 
-This project is provided as-is for educational and personal use.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
