@@ -45,6 +45,7 @@ class EDAIApp(ctk.CTk):
 
         # Application state
         self.is_running = False
+        self.llm_loaded = False
         self.watcher: Optional[JournalWatcher] = None
         self.parser: Optional[EventParser] = None
         self.llm: Optional[LLMEngine] = None
@@ -145,13 +146,21 @@ class EDAIApp(ctk.CTk):
         )
         self.journal_label.pack(side="left", padx=20)
 
-        # Model status
-        self.model_label = ctk.CTkLabel(
+        # LLM status
+        self.llm_status_label = ctk.CTkLabel(
             status_frame,
-            text="Model: Not Loaded",
+            text="LLM: Not Loaded",
             font=ctk.CTkFont(size=12)
         )
-        self.model_label.pack(side="right", padx=20)
+        self.llm_status_label.pack(side="right", padx=20)
+
+        # TTS status
+        self.tts_status_label = ctk.CTkLabel(
+            status_frame,
+            text="TTS: Not Loaded",
+            font=ctk.CTkFont(size=12)
+        )
+        self.tts_status_label.pack(side="right", padx=20)
 
     def _build_control_frame(self, parent):
         """Build the control button frame"""
@@ -170,6 +179,31 @@ class EDAIApp(ctk.CTk):
             width=150
         )
         self.start_button.pack(side="left", padx=20)
+
+        # Load Model button
+        self.load_model_button = ctk.CTkButton(
+            control_frame,
+            text="Load LLM",
+            command=self.load_llm,
+            font=ctk.CTkFont(size=14),
+            fg_color="#0088AA",
+            hover_color="#006688",
+            width=120
+        )
+        self.load_model_button.pack(side="left", padx=10)
+
+        # Unload Model button (initially disabled)
+        self.unload_model_button = ctk.CTkButton(
+            control_frame,
+            text="Unload LLM",
+            command=self.unload_llm,
+            font=ctk.CTkFont(size=14),
+            fg_color="#AA6600",
+            hover_color="#884400",
+            width=120,
+            state="disabled"
+        )
+        self.unload_model_button.pack(side="left", padx=10)
 
         # Test Audio button
         test_button = ctk.CTkButton(
@@ -264,26 +298,14 @@ class EDAIApp(ctk.CTk):
             urgent_events=set(self.config.urgent_events)
         )
 
-        # Initialize LLM
-        use_mock = not Path(self.config.llm_model_path).exists()
-        if use_mock:
-            logger.warning("LLM model not found, using mock")
-            self.llm = MockLLMEngine(
-                model_path=self.config.llm_model_path,
-                system_prompt=self.config.system_prompt
-            )
+        # Check if LLM is already loaded, if not load it now
+        if not self.llm_loaded or self.llm is None:
+            logger.info("LLM not loaded, loading now...")
+            if not self._load_llm_internal():
+                messagebox.showerror("Error", "Failed to load LLM model")
+                return
         else:
-            self.llm = LLMEngine(
-                model_path=self.config.llm_model_path,
-                n_ctx=self.config.n_ctx,
-                n_gpu_layers=self.config.n_gpu_layers,
-                max_tokens=self.config.max_tokens,
-                system_prompt=self.config.system_prompt
-            )
-
-        if not self.llm.load_model():
-            messagebox.showerror("Error", "Failed to load LLM model")
-            return
+            logger.info("Using pre-loaded LLM")
 
         # Initialize TTS
         self.tts = TTSEngine(
@@ -315,7 +337,7 @@ class EDAIApp(ctk.CTk):
             hover_color="darkred"
         )
         self._update_status("running")
-        self.model_label.configure(text="Model: Loaded")
+        self.tts_status_label.configure(text="TTS: Loaded")
 
         logger.info("Monitoring started")
 
@@ -331,10 +353,7 @@ class EDAIApp(ctk.CTk):
             self.tts.stop()
             self.tts = None
 
-        if self.llm:
-            self.llm.unload_model()
-            self.llm = None
-
+        # Note: LLM is NOT unloaded here - it stays loaded for use
         self.parser = None
 
         # Update UI
@@ -345,9 +364,83 @@ class EDAIApp(ctk.CTk):
             hover_color="darkgreen"
         )
         self._update_status("stopped")
-        self.model_label.configure(text="Model: Not Loaded")
+        self.tts_status_label.configure(text="TTS: Not Loaded")
 
         logger.info("Monitoring stopped")
+
+    def load_llm(self):
+        """Load the LLM model manually"""
+        if self.llm_loaded:
+            messagebox.showinfo("Info", "LLM is already loaded")
+            return
+
+        if self._load_llm_internal():
+            messagebox.showinfo("Success", "LLM model loaded successfully")
+
+    def unload_llm(self):
+        """Unload the LLM model manually"""
+        if not self.llm_loaded or self.llm is None:
+            messagebox.showinfo("Info", "LLM is not loaded")
+            return
+
+        # Check if monitoring is running
+        if self.is_running:
+            result = messagebox.askyesno(
+                "Warning",
+                "Monitoring is currently running. Unloading the LLM will stop monitoring. Continue?"
+            )
+            if not result:
+                return
+            self.stop_monitoring()
+
+        # Unload the model
+        self.llm.unload_model()
+        self.llm = None
+        self.llm_loaded = False
+
+        # Update UI
+        self.llm_status_label.configure(text="LLM: Not Loaded")
+        self.load_model_button.configure(state="normal")
+        self.unload_model_button.configure(state="disabled")
+
+        logger.info("LLM unloaded")
+
+    def _load_llm_internal(self) -> bool:
+        """
+        Internal method to load the LLM
+
+        Returns:
+            True if successful, False otherwise
+        """
+        use_mock = not Path(self.config.llm_model_path).exists()
+        if use_mock:
+            logger.warning("LLM model not found, using mock")
+            self.llm = MockLLMEngine(
+                model_path=self.config.llm_model_path,
+                system_prompt=self.config.system_prompt
+            )
+        else:
+            self.llm = LLMEngine(
+                model_path=self.config.llm_model_path,
+                n_ctx=self.config.n_ctx,
+                n_gpu_layers=self.config.n_gpu_layers,
+                max_tokens=self.config.max_tokens,
+                system_prompt=self.config.system_prompt
+            )
+
+        if not self.llm.load_model():
+            return False
+
+        self.llm_loaded = True
+
+        # Update UI
+        llm_type = "Mock" if use_mock else "Loaded"
+        self.llm_status_label.configure(text=f"LLM: {llm_type}")
+        self.load_model_button.configure(state="disabled")
+        self.unload_model_button.configure(state="normal")
+
+        logger.info(f"LLM loaded ({llm_type})")
+        return True
 
     def _handle_event(self, event_data: Dict):
         """Handle a journal event"""
@@ -430,6 +523,12 @@ class EDAIApp(ctk.CTk):
 
         # Speak the summary
         if self.tts and not self.config.raw_data_mode:
+            # Check if LLM is available
+            if not self.llm:
+                # LLM not available, just speak the state directly
+                self.tts.speak(state_desc, AudioPriority.NORMAL)
+                return
+
             # Generate a friendly announcement
             announcement_prompt = f"Summarize this game state in one brief sentence: {state_desc}"
 
@@ -871,9 +970,9 @@ class ChatWindow(ctk.CTkToplevel):
         # Clear the entry
         self.chat_entry.delete("0", "end")
 
-        # Check if monitoring is running
-        if not self.parent.is_running or not self.parent.llm:
-            self._add_message("System", "Please start monitoring first to use the chat function.", "red")
+        # Check if LLM is loaded
+        if not self.parent.llm_loaded or not self.parent.llm:
+            self._add_message("System", "Please load the LLM model first to use the chat function.", "red")
             return
 
         # Add user message to history
