@@ -354,13 +354,27 @@ class EDAIApp(ctk.CTk):
         if not self.parser:
             return
 
-        # Update game state
+        # Update game state (always do this, even for initial state loading)
         self.game_state.update(event_data)
 
         # Debug: Log game state updates
         event_name = event_data.get("event", "")
         if event_name in ["LoadGame", "FSDJump", "Docked", "Undocked", "ShipRefuelled", "ShieldState", "ShipLowFuel"]:
             print(f"[GAME STATE UPDATE] {event_name}: Current system={self.game_state.state.current_system}, Fuel={self.game_state.state.fuel_level}/{self.game_state.state.fuel_capacity}, Shields={'UP' if self.game_state.state.shields_up else 'DOWN'}")
+
+        # Handle special InitialStateLoaded event
+        if event_name == "InitialStateLoaded":
+            self._announce_initial_state()
+            return
+
+        # Check if this is part of initial state loading (don't speak these)
+        if event_data.get("_initial_state_loading", False):
+            # Still log to event log, but don't speak
+            parsed = self.parser.parse(event_data)
+            if parsed:
+                timestamp = event_data.get("timestamp", "")
+                self.event_queue.put(("event", f"[{timestamp}] {parsed.formatted_text} (state loaded)"))
+            return
 
         # Parse event
         parsed = self.parser.parse(event_data)
@@ -399,6 +413,32 @@ class EDAIApp(ctk.CTk):
 
             print(f"[EVENT] Sending to LLM: {parsed.formatted_text}")
             self.llm.generate(parsed.formatted_text, on_response)
+
+    def _announce_initial_state(self):
+        """Announce a summary of the current game state after initial load"""
+        state_desc = self.game_state.get_context_description()
+
+        if not state_desc or state_desc == "No game state available yet.":
+            return
+
+        print(f"[INITIAL STATE] Summary: {state_desc}")
+
+        # Add to response log
+        self.event_queue.put(("response", f"[STATE LOADED] {state_desc}"))
+
+        # Speak the summary
+        if self.tts and not self.config.raw_data_mode:
+            # Generate a friendly announcement
+            announcement_prompt = f"Summarize this game state in one brief sentence: {state_desc}"
+
+            def on_response(response: str):
+                print(f"[INITIAL STATE] Announcement: {response}")
+                self.tts.speak(response, AudioPriority.NORMAL)
+
+            self.llm.generate(announcement_prompt, on_response)
+        elif self.tts:
+            # In raw data mode, just speak the state directly
+            self.tts.speak(state_desc, AudioPriority.NORMAL)
 
     def test_audio(self):
         """Test the audio system"""

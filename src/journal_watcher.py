@@ -27,6 +27,7 @@ class JournalFileHandler(FileSystemEventHandler):
         self.callback = callback
         self.last_position = 0
         self.current_journal: Optional[Path] = None
+        self.loading_initial_state = False  # Track if we're loading initial state
 
     def set_journal_file(self, journal_path: Path, read_initial: bool = False) -> None:
         """
@@ -115,6 +116,9 @@ class JournalFileHandler(FileSystemEventHandler):
             "Cargo"
         ]
 
+        # Set flag to indicate we're loading initial state (prevents speaking individual events)
+        self.loading_initial_state = True
+
         # Read from the end to find the most recent state events
         try:
             events_found = []
@@ -145,10 +149,24 @@ class JournalFileHandler(FileSystemEventHandler):
             for event_data in reversed(events_found):
                 event_name = event_data.get("event", "")
                 print(f"[INITIAL STATE] Loading: {event_name}")
+                # Mark event as silent so GUI doesn't speak it
+                event_data["_initial_state_loading"] = True
+                # These will update game state silently
                 self.callback(event_data)
+
+            # Send a special event to trigger the summary announcement
+            self.callback({
+                "event": "InitialStateLoaded",
+                "timestamp": "",
+                "_initial_state_summary": True
+            })
+
+            # Clear the flag
+            self.loading_initial_state = False
 
         except (IOError, OSError) as e:
             print(f"Error reading initial state from journal: {e}")
+            self.loading_initial_state = False
 
 
 class JournalWatcher:
