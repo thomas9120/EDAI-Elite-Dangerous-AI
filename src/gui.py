@@ -416,7 +416,7 @@ class EDAIApp(ctk.CTk):
 
     def _announce_initial_state(self):
         """Announce a summary of the current game state after initial load"""
-        state_desc = self.game_state.get_context_description()
+        state_desc = self.game_state.state.get_context_description()
 
         if not state_desc or state_desc == "No game state available yet.":
             return
