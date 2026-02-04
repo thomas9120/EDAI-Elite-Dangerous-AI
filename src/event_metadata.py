@@ -24,6 +24,20 @@ EVENT_DISPLAY_NAMES = {
     "Died": "Ship Destroyed",
     "Bounty": "Bounty Claimed",
     "Resurrect": "Resurrected",
+    "UnderAttack": "Under Attack",
+    "PVPKill": "PVP Kill",
+    "Interdicted": "Being Interdicted",
+    "Interdiction": "Interdiction Attempt",
+    "EscapeInterdiction": "Escaped Interdiction",
+    "HullDamage": "Hull Damage",
+    "FighterDestroyed": "Fighter Destroyed",
+    "SRVDestroyed": "SRV Destroyed",
+    "HeatWarning": "Heat Warning",
+    "HeatDamage": "Heat Damage",
+    "CockpitBreached": "Cockpit Breached",
+    "SelfDestruct": "Self Destruct",
+    "CommitCrime": "Crime Committed",
+    "FactionKillBond": "Faction Kill Bond",
 
     # Exploration
     "Scan": "Body Scanned",
@@ -67,4 +81,6 @@ RECOMMENDED_EVENTS = [
     "Died",
     "Scan",
     "MissionCompleted",
+    "UnderAttack",
+    "HullDamage",
 ]
