@@ -560,9 +560,11 @@ class SettingsWindow(ctk.CTkToplevel):
         raw_frame = ctk.CTkFrame(container)
         raw_frame.pack(fill="x", pady=(10, 20))
 
+        self.raw_data_var = ctk.BooleanVar()
         self.raw_data_checkbox = ctk.CTkCheckBox(
             raw_frame,
             text="Raw Data Mode (speak event data directly, bypass LLM)",
+            variable=self.raw_data_var,
             checkbox_width=20,
             font=ctk.CTkFont(size=12)
         )
@@ -689,7 +691,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.max_tokens_entry.insert("0", str(self.config.max_tokens))
 
         # Raw Data Mode checkbox
-        self.raw_data_checkbox.select(self.config.raw_data_mode)
+        self.raw_data_var.set(self.config.raw_data_mode)
 
         # Event checkboxes
         current_whitelist = set(self.config.events_whitelist)
@@ -716,7 +718,7 @@ class SettingsWindow(ctk.CTkToplevel):
             return
 
         # Raw Data Mode
-        self.config.set("raw_data_mode", self.raw_data_checkbox.get())
+        self.config.set("raw_data_mode", self.raw_data_var.get())
 
         # Event whitelist
         selected_events = [event for event, var in self.event_checkboxes.items() if var.get()]
