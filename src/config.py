@@ -20,7 +20,7 @@ class Config:
         "n_ctx": 4096,
         "n_gpu_layers": -1,
         "max_tokens": 50,
-        "temperature": 0.8,
+        "temperature": 0.3,
         "audio_device": None,
         "events_whitelist": [
             "FSDJump", "DockingGranted", "ShieldState", "ShipLowFuel",

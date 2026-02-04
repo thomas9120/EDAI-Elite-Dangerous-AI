@@ -127,25 +127,32 @@ class EDSMAPI:
             response.raise_for_status()
             data = response.json()
 
-            if not data or len(data) == 0:
+            if not data or (isinstance(data, list) and len(data) == 0):
                 return None
 
-            system_data = data[0]
+            # EDSM returns a dict, not a list
+            system_data = data if isinstance(data, dict) else data[0]
+
+            # Check if the system was found
+            if not system_data or 'name' not in system_data:
+                return None
 
             # Get additional information about bodies/stars
-            bodies_url = f"{self.BASE_URL}/system-bodies"
-            bodies_params = {
-                'systemName': system_name,
-            }
-
             bodies_data = {}
             try:
+                bodies_url = f"{self.BASE_URL}/system-bodies"
+                bodies_params = {
+                    'systemName': system_name,
+                }
+
                 bodies_response = self.session.get(bodies_url, params=bodies_params, timeout=5)
                 bodies_response.raise_for_status()
-                bodies_data = bodies_response.json()
+                bodies_response_data = bodies_response.json()
 
-                # Check if bodies is a list (error) or dict (success)
-                if isinstance(bodies_data, list):
+                # Check if bodies is a list (has bodies) or dict (error/no bodies)
+                if isinstance(bodies_response_data, dict) and 'bodies' in bodies_response_data:
+                    bodies_data = bodies_response_data
+                else:
                     bodies_data = {}
             except Exception:
                 bodies_data = {}
